@@ -19,6 +19,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItemController: StatusItemController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        for line in DiagnosticLog.systemSummary {
+            Log.app.notice("\(line, privacy: .public)")
+        }
+
         // An agent app has no visible menu bar, but text fields still need its Edit menu for ⌘C/⌘V.
         NSApp.mainMenu = .standard
 

@@ -173,6 +173,28 @@ final class AppModel {
         }
     }
 
+    /// Copies the diagnostic log, with this Mac's details and the current settings, as text.
+    func copyLogs() async -> Bool {
+        let settings = [
+            "Settings: correction \(create.correction.letter), colors \(create.foreground.hex) on \(create.background.hex), drag \(create.dragFormat.title), copy/save \(create.saveFormat.title)",
+            "Login item: \(String(describing: loginItem.status)), history: \(history.entries.count) entries",
+            "Screen Recording permission: \(ScreenCapture.hasPermission ? "granted" : "not granted")",
+            "Displays: " + NSScreen.screens.map { "\(Int($0.frame.width))×\(Int($0.frame.height)) @\($0.backingScaleFactor)x" }.joined(separator: ", "),
+        ]
+
+        do {
+            let report = try await DiagnosticLog.report(header: DiagnosticLog.systemSummary + settings)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(report, forType: .string)
+            Log.app.info("Copied the diagnostic log, \(report.utf8.count) bytes")
+            return true
+        } catch {
+            Log.app.error("Couldn't read the log store: \(String(describing: error), privacy: .public)")
+            NSAlert(error: error).runModal()
+            return false
+        }
+    }
+
     private func runPanel(_ panel: NSSavePanel) async -> URL? {
         dismissPopover()
         NSApp.activate()

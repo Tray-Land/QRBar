@@ -67,6 +67,17 @@ struct SettingsView: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
+
+                Section("Troubleshooting") {
+                    LabeledContent {
+                        FlashButton("Copy Logs", systemImage: "doc.on.clipboard", doneTitle: "Copied") {
+                            await app.copyLogs()
+                        }
+                    } label: {
+                        Text("Diagnostic logs")
+                        Text("What QRBar did since it launched, to paste into a bug report. The text you encode or scan isn't included.")
+                    }
+                }
             }
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
