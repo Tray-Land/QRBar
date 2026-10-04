@@ -31,6 +31,31 @@ struct QRCodecTests {
         #expect(QRCodec.encode(String(repeating: "x", count: 5000), correction: .medium) == nil)
     }
 
+    @Test func encodesTypicalLinksAtEveryLevel() throws {
+        let link = "https://milwaukee.surfrider.org/shorewood-beach-cleanup-volunteer-signup?utm_source=flyer&utm_medium=qr"
+        for correction in QRErrorCorrection.allCases {
+            #expect(QRCodec.encode(link, correction: correction) != nil, "\(correction.title)")
+        }
+    }
+
+    /// Fills each version to capacity at each level, so every table entry and layout gets decoded once.
+    @Test(arguments: QRErrorCorrection.allCases)
+    func everyVersionDecodes(correction: QRErrorCorrection) async throws {
+        let alphabet = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~/")
+        for version in QREncoder.minVersion...QREncoder.maxVersion {
+            let capacityBits = QREncoder.dataCodewords(version: version, correction: correction) * 8
+            let count = (capacityBits - 4 - (version <= 9 ? 8 : 16)) / 8
+            let text = String((0..<count).map { alphabet[($0 * 7 + version * 13) % alphabet.count] })
+
+            let matrix = try #require(QRCodec.encode(text, correction: correction))
+            #expect(matrix.size == version * 4 + 17 + 2 * QRCodec.quietZone, "v\(version) \(correction.letter)")
+            #expect(QRCodec.encode(text + "x", correction: correction)?.size != matrix.size, "v\(version) \(correction.letter) is at capacity")
+
+            let image = try #require(QRCodec.render(matrix, scale: 4))
+            #expect(try await QRReader.decode(image) == [text], "v\(version) \(correction.letter)")
+        }
+    }
+
     @Test func finderPatternsAreTopLeftTopRightAndBottomLeft() throws {
         let matrix = try #require(QRCodec.encode("orientation", correction: .medium))
         let near = QRCodec.quietZone

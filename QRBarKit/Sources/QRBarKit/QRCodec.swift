@@ -1,6 +1,4 @@
 import CoreGraphics
-import CoreImage
-import CoreImage.CIFilterBuiltins
 import ImageIO
 import UniformTypeIdentifiers
 
@@ -42,7 +40,7 @@ public struct QRMatrix: Hashable, Sendable {
     }
 }
 
-/// Encodes QR codes with Core Image and renders them as images.
+/// Encodes QR codes and renders them as images.
 public enum QRCodec {
     /// Modules of blank margin around the symbol. The spec asks for 4; 2 reads fine on screens and
     /// keeps the code larger in the preview.
@@ -51,59 +49,32 @@ public enum QRCodec {
     /// Codes below this contrast ratio are hard for many scanners to read.
     public static let minReadableContrast = 3.0
 
-    private static let context = CIContext(options: [.useSoftwareRenderer: false, .cacheIntermediates: false])
-
     /// Builds the module grid for `text`, or nil when it's empty or too long to encode.
     public static func encode(_ text: String, correction: QRErrorCorrection) -> QRMatrix? {
-        guard !text.isEmpty else {
+        guard !text.isEmpty, let symbol = QREncoder.encode(Array(text.utf8), correction: correction) else {
             return nil
         }
 
-        let filter = CIFilter.qrCodeGenerator()
-        filter.message = Data(text.utf8)
-        filter.correctionLevel = correction.rawValue
-
-        // One pixel per module. Core Image returns nil when the message exceeds QR capacity.
-        guard let output = filter.outputImage else {
-            return nil
-        }
-
-        let extent = output.extent.integral
-        let width = Int(extent.width)
-        let height = Int(extent.height)
-        guard width > 0, width == height else {
-            return nil
-        }
-
-        var pixels = [UInt8](repeating: 255, count: width * height)
-        context.render(output, toBitmap: &pixels, rowBytes: width, bounds: extent, format: .L8, colorSpace: nil)
-
-        // Core Image adds its own margin; find the symbol (its finder patterns touch all three
-        // corners) and re-pad it with our quiet zone.
-        var minX = width, minY = height, maxX = -1, maxY = -1
-        for y in 0..<height {
-            for x in 0..<width where pixels[y * width + x] < 128 {
-                minX = min(minX, x)
-                maxX = max(maxX, x)
-                minY = min(minY, y)
-                maxY = max(maxY, y)
-            }
-        }
-
-        guard maxX >= minX, maxY >= minY else {
-            return nil
-        }
-
-        let symbol = maxX - minX + 1
-        let size = symbol + 2 * quietZone
+        let size = symbol.size + 2 * quietZone
         var modules = [Bool](repeating: false, count: size * size)
-        for y in 0..<(maxY - minY + 1) {
-            for x in 0..<symbol where pixels[(minY + y) * width + minX + x] < 128 {
+        for y in 0..<symbol.size {
+            for x in 0..<symbol.size where symbol.modules[y * symbol.size + x] {
                 modules[(y + quietZone) * size + x + quietZone] = true
             }
         }
 
         return QRMatrix(size: size, modules: modules)
+    }
+
+    /// The most UTF-8 bytes a code can hold at `correction`.
+    public static func capacity(for correction: QRErrorCorrection) -> Int {
+        let version = QREncoder.maxVersion
+        return (QREncoder.dataCodewords(version: version, correction: correction) * 8 - QREncoder.dataBits(byteCount: 0, version: version)) / 8
+    }
+
+    /// The QR version (1–40) of a matrix made by ``encode(_:correction:)``.
+    public static func version(of matrix: QRMatrix) -> Int {
+        (matrix.size - 2 * quietZone - 17) / 4
     }
 
     /// The largest whole-pixel scale that keeps the image at or under `maxPixels` wide.
