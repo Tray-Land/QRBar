@@ -101,6 +101,7 @@ public enum QRCodec {
                   bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
               )
         else {
+            Log.codec.error("Couldn't create a \(width)×\(width) bitmap context to render the code")
             return nil
         }
 
@@ -128,7 +129,12 @@ public enum QRCodec {
             }
         }
 
-        return context.makeImage()
+        guard let image = context.makeImage() else {
+            Log.codec.error("Couldn't make an image from the \(width)×\(width) bitmap context")
+            return nil
+        }
+
+        return image
     }
 
     /// Renders the matrix as an SVG document, one unit per module, scaled to `pixels` wide by default.
@@ -172,10 +178,16 @@ public enum QRCodec {
     public static func pngData(_ image: CGImage) -> Data? {
         let data = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else {
+            Log.codec.error("Couldn't create a PNG destination")
             return nil
         }
 
         CGImageDestinationAddImage(destination, image, nil)
-        return CGImageDestinationFinalize(destination) ? data as Data : nil
+        guard CGImageDestinationFinalize(destination) else {
+            Log.codec.error("Couldn't finalize a \(image.width)×\(image.height) PNG")
+            return nil
+        }
+
+        return data as Data
     }
 }

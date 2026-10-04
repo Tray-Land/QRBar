@@ -1,4 +1,6 @@
 import AppKit
+import OSLog
+import QRBarKit
 import SwiftUI
 
 /// Owns the menu bar icon and its popover. Left-click toggles the popover; right-click (or
@@ -52,6 +54,10 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
                 showPopover(remainingAttempts: remainingAttempts - 1)
             }
             return
+        }
+
+        if !isInMenuBar(button.window) {
+            Log.app.notice("Status item still isn't in the menu bar; showing the popover anyway")
         }
 
         if !popover.isShown {

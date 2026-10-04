@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import Observation
 import QRBarKit
 
@@ -54,8 +55,10 @@ final class HistoryModel {
 
     private(set) var entries: [HistoryEntry] {
         didSet {
-            if let data = try? JSONEncoder().encode(entries) {
-                defaults.set(data, forKey: Self.key)
+            do {
+                defaults.set(try JSONEncoder().encode(entries), forKey: Self.key)
+            } catch {
+                Log.history.error("Couldn't save history: \(String(describing: error), privacy: .public)")
             }
         }
     }
@@ -64,7 +67,18 @@ final class HistoryModel {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        entries = defaults.data(forKey: Self.key).flatMap { try? JSONDecoder().decode([HistoryEntry].self, from: $0) } ?? []
+        guard let data = defaults.data(forKey: Self.key) else {
+            entries = []
+            return
+        }
+
+        do {
+            entries = try JSONDecoder().decode([HistoryEntry].self, from: data)
+            Log.history.info("Loaded \(self.entries.count) entries")
+        } catch {
+            entries = []
+            Log.history.error("Couldn't load history (\(data.count) bytes): \(String(describing: error), privacy: .public)")
+        }
     }
 
     func record(_ entry: HistoryEntry) {
@@ -73,16 +87,19 @@ final class HistoryModel {
             return // Already on top; don't rewrite defaults for nothing.
         }
 
+        Log.history.info("Recorded a \(entry.text.utf8.count)-byte entry at \(entry.correction.letter, privacy: .public)")
         var updated = entries.filter { $0.text != entry.text }
         updated.insert(entry, at: 0)
         entries = Array(updated.prefix(Self.maxEntries))
     }
 
     func remove(_ entry: HistoryEntry) {
+        Log.history.info("Removed an entry")
         entries.removeAll { $0.id == entry.id }
     }
 
     func clear() {
+        Log.history.info("Cleared \(self.entries.count) entries")
         entries = []
     }
 }

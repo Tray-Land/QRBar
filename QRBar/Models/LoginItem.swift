@@ -1,4 +1,6 @@
+import OSLog
 import Observation
+import QRBarKit
 import ServiceManagement
 
 /// "Launch at login" through `SMAppService`. The user has the final say in System Settings, so
@@ -30,7 +32,11 @@ final class LoginItem {
     }
 
     func refresh() {
+        let previous = status
         status = SMAppService.mainApp.status
+        if status != previous {
+            Log.settings.info("Login item status: \(String(describing: self.status), privacy: .public)")
+        }
     }
 
     func openSystemSettings() {
@@ -39,6 +45,7 @@ final class LoginItem {
 
     private func setEnabled(_ enabled: Bool) {
         errorMessage = nil
+        Log.settings.info("\(enabled ? "Registering" : "Unregistering", privacy: .public) the login item")
         do {
             if enabled {
                 try SMAppService.mainApp.register()
@@ -46,6 +53,7 @@ final class LoginItem {
                 try SMAppService.mainApp.unregister()
             }
         } catch {
+            Log.settings.error("Couldn't change the login item: \(String(describing: error), privacy: .public)")
             errorMessage = "Couldn't change this: \(error.localizedDescription)"
         }
 

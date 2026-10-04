@@ -1,4 +1,5 @@
 import AppKit
+import OSLog
 import Observation
 import QRBarKit
 import UniformTypeIdentifiers
@@ -15,10 +16,12 @@ final class ReadModel {
     private(set) var needsScreenPermission = false
 
     func read(imageData data: Data) async {
+        Log.read.info("Reading \(data.count) bytes of image data")
         await read { await QRReader.image(from: data) }
     }
 
     func read(fileAt url: URL) async {
+        Log.read.info("Reading a .\(url.pathExtension, privacy: .public) file")
         await read { await QRReader.image(contentsOf: url) }
     }
 
@@ -30,16 +33,20 @@ final class ReadModel {
         ]) as? [URL]
 
         if let url = imageFiles?.first {
+            Log.read.info("Pasteboard has an image file")
             await read(fileAt: url)
             return
         }
 
         let imageType = pasteboard.types?.first { UTType($0.rawValue)?.conforms(to: .image) == true }
         if let imageType, let data = pasteboard.data(forType: imageType) {
+            Log.read.info("Pasteboard has \(imageType.rawValue, privacy: .public) data")
             await read(imageData: data)
             return
         }
 
+        let types = pasteboard.types?.map(\.rawValue).joined(separator: ", ") ?? "none"
+        Log.read.notice("No image on the pasteboard; types: \(types, privacy: .public)")
         showMessage("There's no image on the clipboard. Copy a picture that contains a QR code.")
     }
 
@@ -69,12 +76,14 @@ final class ReadModel {
         sourceImage = image
         do {
             let payloads = try await QRReader.decode(image)
+            Log.read.info("Read \(payloads.count) code(s)")
             if payloads.isEmpty {
                 showMessage("No QR code found. Try a sharper or larger image.")
             } else {
                 results = payloads.map(ScanResult.init)
             }
         } catch {
+            Log.read.error("Couldn't read the image: \(String(describing: error), privacy: .public)")
             showMessage("Couldn't read that image: \(error.localizedDescription)")
         }
     }

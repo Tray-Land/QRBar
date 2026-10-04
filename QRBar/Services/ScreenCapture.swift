@@ -1,5 +1,7 @@
 import CoreGraphics
 import Foundation
+import OSLog
+import QRBarKit
 
 /// Lets the user select part of the screen with the system screenshot UI (crosshair, Space for a
 /// window, Esc to cancel) — the macOS counterpart of the Windows snipping overlay.
@@ -28,12 +30,15 @@ enum ScreenCapture {
             do {
                 try process.run()
             } catch {
+                Log.read.error("Couldn't run screencapture: \(String(describing: error), privacy: .public)")
                 process.terminationHandler = nil
                 continuation.resume(throwing: error)
             }
         }
 
         // Esc leaves no file behind (and a non-zero exit status); that's a cancel, not an error.
-        return try? Data(contentsOf: url)
+        let data = try? Data(contentsOf: url)
+        Log.read.info("screencapture exited with status \(process.terminationStatus), \(data.map { "\($0.count) bytes" } ?? "no file", privacy: .public)")
+        return data
     }
 }

@@ -16,6 +16,7 @@ public enum QRReader {
     /// ``maxDecodeSize`` and flattened onto white. Returns nil when the data isn't an image.
     public static func image(from data: Data) async -> CGImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
+            Log.read.error("Couldn't create an image source from \(data.count) bytes")
             return nil
         }
 
@@ -25,6 +26,7 @@ public enum QRReader {
     /// Like ``image(from:)-(Data)`` but reads from a file.
     public static func image(contentsOf url: URL) async -> CGImage? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
+            Log.read.error("Couldn't create an image source from a .\(url.pathExtension, privacy: .public) file")
             return nil
         }
 
@@ -35,7 +37,17 @@ public enum QRReader {
     public static func decode(_ image: CGImage) async throws -> [String] {
         var request = DetectBarcodesRequest()
         request.symbologies = symbologies
-        let observations = try await request.perform(on: image)
+        let start = ContinuousClock.now
+        let observations: [BarcodeObservation]
+        do {
+            observations = try await request.perform(on: image)
+        } catch {
+            Log.read.error("Vision failed on a \(image.width)×\(image.height) image: \(String(describing: error), privacy: .public)")
+            throw error
+        }
+
+        let symbologies = observations.map { String(describing: $0.symbology) }.joined(separator: ", ")
+        Log.read.info("Vision found \(observations.count) code(s) [\(symbologies, privacy: .public)] in a \(image.width)×\(image.height) image in \(ContinuousClock.now - start, privacy: .public)")
 
         var seen = Set<String>()
         return observations
@@ -51,6 +63,7 @@ public enum QRReader {
 
     private static func image(from source: CGImageSource) -> CGImage? {
         guard CGImageSourceGetCount(source) > 0 else {
+            Log.read.error("Image source has no images (type: \(CGImageSourceGetType(source) as String? ?? "unknown", privacy: .public))")
             return nil
         }
 
@@ -65,10 +78,13 @@ public enum QRReader {
             kCGImageSourceShouldCacheImmediately: true,
         ]
 
+        let type = CGImageSourceGetType(source) as String? ?? "unknown"
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            Log.read.error("Couldn't decode a \(width)×\(height) \(type, privacy: .public) image")
             return nil
         }
 
+        Log.read.info("Loaded a \(width)×\(height) \(type, privacy: .public) image as \(image.width)×\(image.height), alpha \(image.alphaInfo.rawValue)")
         return flattenedOntoWhite(image)
     }
 
@@ -90,6 +106,7 @@ public enum QRReader {
                   bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
               )
         else {
+            Log.read.error("Couldn't create a context to flatten a \(image.width)×\(image.height) image; decoding it as is")
             return image
         }
 

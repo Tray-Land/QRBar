@@ -1,4 +1,5 @@
 import AppKit
+import OSLog
 import Observation
 import QRBarKit
 import UniformTypeIdentifiers
@@ -17,8 +18,21 @@ final class AppModel {
         case history
     }
 
-    var tab: Tab = .create
-    var page: Page = .main
+    var tab: Tab = .create {
+        didSet {
+            if tab != oldValue {
+                Log.app.info("Tab: \(String(describing: self.tab), privacy: .public)")
+            }
+        }
+    }
+
+    var page: Page = .main {
+        didSet {
+            if page != oldValue {
+                Log.app.info("Page: \(String(describing: self.page), privacy: .public)")
+            }
+        }
+    }
 
     /// Changes every time the popover opens, so views can move focus.
     private(set) var showCount = 0
@@ -33,11 +47,13 @@ final class AppModel {
 
     func popoverDidShow() {
         showCount += 1
+        Log.app.info("Popover opened (\(self.showCount) this launch)")
         loginItem.refresh()
     }
 
     /// Leaving the popover counts as being done with the current code, so it goes into history.
     func popoverDidClose() {
+        Log.app.info("Popover closed")
         recordHistory()
     }
 
@@ -52,6 +68,7 @@ final class AppModel {
     /// Puts the current code on the clipboard. Returns true once copied.
     func copyImage(as format: ExportFormat) -> Bool {
         guard let data = create.exportData(as: format) else {
+            Log.export.error("Nothing to copy as \(format.title, privacy: .public)")
             return false
         }
 
@@ -59,12 +76,14 @@ final class AppModel {
         case .png: NSPasteboard.general.setPNG(data)
         case .svg: NSPasteboard.general.setSVG(data)
         }
+        Log.export.info("Copied \(format.title, privacy: .public), \(data.count) bytes")
         recordHistory()
         return true
     }
 
     /// Returns to a code from history on the Create tab.
     func restore(_ entry: HistoryEntry) {
+        Log.history.info("Restoring a \(entry.text.utf8.count)-byte entry at \(entry.correction.letter, privacy: .public)")
         recordHistory()
         create.restore(entry)
         recordHistory()
@@ -74,6 +93,7 @@ final class AppModel {
 
     /// Turns a scanned result into a new code on the Create tab.
     func makeCode(from text: String) {
+        Log.read.info("Making a code from a \(text.utf8.count)-byte scan result")
         recordHistory()
         create.text = text
         tab = .create
@@ -87,6 +107,7 @@ final class AppModel {
     /// Asks where to save the current code. Returns true once saved.
     func saveImage(as format: ExportFormat) async -> Bool {
         guard let data = create.exportData(as: format) else {
+            Log.export.error("Nothing to save as \(format.title, privacy: .public)")
             return false
         }
 
@@ -97,14 +118,17 @@ final class AppModel {
         panel.directoryURL = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first
 
         guard let url = await runPanel(panel) else {
+            Log.export.info("Save cancelled")
             return false
         }
 
         do {
             try data.write(to: url, options: .atomic)
+            Log.export.info("Saved \(format.title, privacy: .public), \(data.count) bytes")
             recordHistory()
             return true
         } catch {
+            Log.export.error("Couldn't save \(format.title, privacy: .public): \(String(describing: error), privacy: .public)")
             NSAlert(error: error).runModal()
             return false
         }
@@ -117,7 +141,10 @@ final class AppModel {
         panel.directoryURL = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first
 
         if let url = await runPanel(panel) {
+            Log.read.info("Opening a .\(url.pathExtension, privacy: .public) file")
             await read.read(fileAt: url)
+        } else {
+            Log.read.info("Open cancelled")
         }
     }
 
@@ -125,6 +152,7 @@ final class AppModel {
     func scanScreen() async {
         tab = .read
         guard ScreenCapture.hasPermission else {
+            Log.read.notice("No Screen Recording permission; requesting it")
             ScreenCapture.requestPermission()
             read.showPermissionMessage()
             return
@@ -138,8 +166,9 @@ final class AppModel {
         case .success(let data?):
             await read.read(imageData: data)
         case .success(nil):
-            break // Cancelled with Esc.
+            Log.read.info("Screen capture cancelled")
         case .failure(let error):
+            Log.read.error("Screen capture failed: \(String(describing: error), privacy: .public)")
             read.showMessage("Couldn't capture the screen: \(error.localizedDescription)")
         }
     }

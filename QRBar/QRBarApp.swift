@@ -1,4 +1,6 @@
 import AppKit
+import OSLog
+import QRBarKit
 
 /// Menu bar only: no Dock icon (`LSUIElement`) and no windows at launch, just a status item that
 /// toggles a popover. AppKit owns the status item because `MenuBarExtra` can't be opened from code
@@ -26,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // First run: show where the app lives instead of launching into silence.
         let defaults = UserDefaults.standard
         if !defaults.bool(forKey: "hasLaunchedBefore") {
+            Log.app.notice("First launch; showing the popover")
             defaults.set(true, forKey: "hasLaunchedBefore")
             controller.showPopover()
         }
@@ -33,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Launching the app again (Finder, Spotlight) opens the popover instead of doing nothing.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        Log.app.info("Reopened; showing the popover")
         statusItemController?.showPopover()
         return false
     }
