@@ -97,6 +97,11 @@ struct CreateView: View {
                 .resizable()
                 .interpolation(.none)
                 .aspectRatio(1, contentMode: .fit)
+                .background {
+                    if !create.background.isOpaque {
+                        Checkerboard()
+                    }
+                }
                 .clipShape(.rect(cornerRadius: 10))
                 .overlay {
                     RoundedRectangle(cornerRadius: 10)

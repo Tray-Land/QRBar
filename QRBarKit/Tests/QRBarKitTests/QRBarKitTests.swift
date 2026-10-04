@@ -148,6 +148,33 @@ struct QRCodecTests {
         #expect(try await QRReader.decode(loaded) == ["transparent"])
     }
 
+    @Test func clearBackgroundRendersTransparentAndStillDecodes() async throws {
+        let matrix = try #require(QRCodec.encode("clear", correction: .medium))
+        let image = try #require(QRCodec.render(matrix, scale: 8, background: .clear))
+        #expect(image.alphaInfo == .premultipliedLast)
+
+        // The top-left pixel is in the quiet zone, so it's empty.
+        var pixel = [UInt8](repeating: 0xFF, count: 4)
+        let context = try #require(CGContext(
+            data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.clear(CGRect(x: 0, y: 0, width: 1, height: 1))
+        context.draw(image, in: CGRect(x: 0, y: 1 - image.height, width: image.width, height: image.height))
+        #expect(pixel[3] == 0)
+
+        let png = try #require(QRCodec.pngData(image))
+        let loaded = try #require(await QRReader.image(from: png))
+        #expect(try await QRReader.decode(loaded) == ["clear"])
+    }
+
+    @Test func clearBackgroundIsLeftOutOfSVG() throws {
+        let matrix = try #require(QRCodec.encode("svg", correction: .medium))
+        let svg = QRCodec.svg(matrix, pixels: 400, background: .clear)
+        #expect(!svg.contains("<rect"))
+        #expect(svg.contains("fill=\"#000000\""))
+    }
+
     private static func firstPixel(of image: CGImage) -> [UInt8]? {
         var pixel = [UInt8](repeating: 0, count: 4)
         guard let context = CGContext(
@@ -178,6 +205,8 @@ struct QRColorTests {
     @Test(arguments: [
         ("#1F2A44", QRColor(red: 0x1F, green: 0x2A, blue: 0x44)),
         ("ff8000", QRColor(red: 0xFF, green: 0x80, blue: 0x00)),
+        ("#FFFFFF00", QRColor.clear),
+        ("#1F2A4480", QRColor(red: 0x1F, green: 0x2A, blue: 0x44, alpha: 0x80)),
     ])
     func validHexParsesAndRoundTrips(hex: String, expected: QRColor) throws {
         let color = try #require(QRColor(hex: hex))
@@ -194,6 +223,11 @@ struct QRColorTests {
         #expect(abs(QRColor.contrastRatio(.black, .white) - 21) < 0.1)
         #expect(abs(QRColor.contrastRatio(.white, .white) - 1) < 0.001)
         #expect(QRColor.contrastRatio(QRColor(red: 200, green: 200, blue: 200), .white) < QRCodec.minReadableContrast)
+    }
+
+    @Test func clearIsJudgedOverWhite() {
+        #expect(abs(QRColor.contrastRatio(.black, .clear) - 21) < 0.1)
+        #expect(QRColor.contrastRatio(.white, .clear) < QRCodec.minReadableContrast)
     }
 }
 

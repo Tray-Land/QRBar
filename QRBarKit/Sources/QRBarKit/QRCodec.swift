@@ -98,7 +98,7 @@ public enum QRCodec {
                   bitsPerComponent: 8,
                   bytesPerRow: 0,
                   space: space,
-                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+                  bitmapInfo: (background.isOpaque && foreground.isOpaque ? CGImageAlphaInfo.noneSkipLast : .premultipliedLast).rawValue
               )
         else {
             Log.codec.error("Couldn't create a \(width)×\(width) bitmap context to render the code")
@@ -108,6 +108,8 @@ public enum QRCodec {
         context.setShouldAntialias(false)
         context.setFillColor(background.cgColor)
         context.fill(CGRect(x: 0, y: 0, width: width, height: width))
+        // Copy, don't blend, so a translucent code isn't tinted by the background beneath it.
+        context.setBlendMode(.copy)
         context.setFillColor(foreground.cgColor)
 
         // Core Graphics puts the origin bottom-left, so flip rows. Fill horizontal runs, not single modules.
@@ -164,14 +166,19 @@ public enum QRCodec {
         }
 
         let size = matrix.size
+        let backgroundRect = background.alpha == 0 ? "" : "<rect width=\"\(size)\" height=\"\(size)\" \(svgFill(background))/>\n"
         return """
         <?xml version="1.0" encoding="UTF-8"?>
         <svg xmlns="http://www.w3.org/2000/svg" width="\(pixels)" height="\(pixels)" viewBox="0 0 \(size) \(size)" shape-rendering="crispEdges">
-        <rect width="\(size)" height="\(size)" fill="\(background.hex)"/>
-        <path d="\(path)" fill="\(foreground.hex)"/>
+        \(backgroundRect)<path d="\(path)" \(svgFill(foreground))/>
         </svg>
 
         """
+    }
+
+    /// `fill`, plus `fill-opacity` when translucent, since not every SVG reader takes 8-digit hex.
+    private static func svgFill(_ color: QRColor) -> String {
+        color.isOpaque ? "fill=\"\(color.rgbHex)\"" : "fill=\"\(color.rgbHex)\" fill-opacity=\"\(String(format: "%.3g", Double(color.alpha) / 255))\""
     }
 
     /// Encodes an image as PNG.

@@ -88,6 +88,11 @@ private struct HistoryRow: View {
                 }
             }
             .frame(width: 36, height: 36)
+            .background {
+                if !entry.background.isOpaque {
+                    Checkerboard(squareSize: 4)
+                }
+            }
             .clipShape(.rect(cornerRadius: 4))
             .overlay {
                 RoundedRectangle(cornerRadius: 4)
